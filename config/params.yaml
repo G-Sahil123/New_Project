@@ -1,0 +1,27 @@
+# config/params.yaml
+data:
+  image_size: 512
+  text_max_length: 512
+  validation_split: 0.2
+  test_split: 0.1
+  batch_size: 16
+
+training:
+  epochs: 50
+  learning_rate: 0.001
+  early_stopping_patience: 10
+  reduce_lr_patience: 5
+
+model:
+  vision_encoder: "efficientnet_b3"
+  text_encoder: "bert-base-uncased" 
+  fusion_layers: [512, 256, 128]
+  dropout_rate: 0.3
+
+document_classes:
+  - "letter"
+  - "form"
+  - "email"
+  - "invoice"
+  - "news_article"
+  - "resume"
