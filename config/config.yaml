@@ -1,4 +1,4 @@
-artifacts_root: artifacts_root
+artifacts_root: artifacts
 
 data_ingestion:
   root_dir: artifacts/data_ingestion
@@ -27,4 +27,5 @@ model_evaluation:
   root_dir: artifacts/model_evaluation
   data_path: artifacts/data_preprocessing/encoded_data
   model_path: artifacts/model_trainer/documind_model
+  mlflow_uri: https://dagshub.com/G-Sahil123/Kidney_Disease_Classification_DL.mlflow
   metric_file_name: artifacts/model_evaluation/metrics.csv  

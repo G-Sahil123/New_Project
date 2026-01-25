@@ -1,6 +1,6 @@
 # config/config.yaml
 app:
-  name: "DocuMind AI"
+  name: "DocuMindAI"
   version: "1.0.0"
   description: "Multimodal Document Intelligence System"
 

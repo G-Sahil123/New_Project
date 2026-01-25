@@ -40,4 +40,12 @@ class ModelTrainerConfig:
     load_best_model_at_end: bool
     remove_unused_columns: bool
     optim: str
-    number_of_unfreeze_layers : int    
+    number_of_unfreeze_layers : int
+
+@dataclass(frozen=True)
+class EvaluationConfig:
+    root_dir: Path
+    model_path: Path
+    data_path: Path
+    all_params: dict
+    mlflow_uri: str    

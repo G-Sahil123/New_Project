@@ -3,7 +3,8 @@ from src.DocumindAI.utils.common import read_yaml,create_directories
 from src.DocumindAI.entity import (DataIngestionConfig,
                                    DataValidationConfig,
                                    DataPreprocessingConfig,
-                                   ModelTrainerConfig)
+                                   ModelTrainerConfig,
+                                   EvaluationConfig)
 
 class ConfigurationManager:
     def __init__(
@@ -87,4 +88,17 @@ class ConfigurationManager:
             number_of_unfreeze_layers = params.number_of_unfreeze_layers
         )
 
-        return model_trainer_config       
+        return model_trainer_config  
+    
+    def get_evaluation_config(self) -> EvaluationConfig:
+        config = self.config.model_evaluation
+        params = self.params.TrainingArguments
+
+        eval_config = EvaluationConfig(
+            root_dir=config.root_dir,
+            model_path = config.model_path,
+            data_path = config.data_path,
+            mlflow_uri= config.mlflow_uri,
+            all_params= params
+        )
+        return eval_config         

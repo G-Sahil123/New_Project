@@ -2,13 +2,14 @@ import os
 import torch
 from datasets import load_from_disk
 from transformers import LayoutLMv3ForSequenceClassification
-from transformers import TrainingArguments, Trainer
+from transformers import TrainingArguments, Trainer, AutoProcessor
 from src.DocumindAI.entity import ModelTrainerConfig
 
 class ModelTrainer:
     def __init__(self, config:ModelTrainerConfig):
         self.config = config
-        self.model = None      
+        self.model = None   
+        self.preprocessor = AutoProcessor.from_pretrained(self.config.model,apply_ocr=True)   
 
     def load_encoded_dataset(self):
         print("Loading encoded dataset from disk")
@@ -83,6 +84,7 @@ class ModelTrainer:
         os.makedirs(model_dir, exist_ok=True)
 
         print(f"Saving model to: {model_dir}")
+        self.preprocessor.save_pretrained(model_dir)
         self.trainer.save_model(model_dir)
         print("Model and trainer saved successfully!")
 
