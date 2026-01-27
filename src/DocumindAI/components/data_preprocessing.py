@@ -4,7 +4,7 @@ from transformers import AutoProcessor
 import torch
 from datasets import load_from_disk
 from src.DocumindAI.logging import logger
-from src.DocumindAI.entity import DataPreprocessingConfig
+from src.DocumindAI.entity.config_entity import DataPreprocessingConfig
 from PIL import Image
 import json
 

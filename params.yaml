@@ -19,16 +19,16 @@ TrainingArguments:
   optim: "adamw_torch"
   number_of_unfreeze_layers: 6
 
-model:
-  vision_encoder: "efficientnet_b3"
-  text_encoder: "bert-base-uncased" 
-  fusion_layers: [512, 256, 128]
-  dropout_rate: 0.3
+# model:
+#   vision_encoder: "efficientnet_b3"
+#   text_encoder: "bert-base-uncased" 
+#   fusion_layers: [512, 256, 128]
+#   dropout_rate: 0.3
 
-document_classes:
-  - "letter"
-  - "form"
-  - "email"
-  - "invoice"
-  - "news_article"
-  - "resume"
+# document_classes:
+#   - "letter"
+#   - "form"
+#   - "email"
+#   - "invoice"
+#   - "news_article"
+#   - "resume"

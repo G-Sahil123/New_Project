@@ -3,7 +3,7 @@ import torch
 from datasets import load_from_disk
 from transformers import LayoutLMv3ForSequenceClassification
 from transformers import TrainingArguments, Trainer, AutoProcessor
-from src.DocumindAI.entity import ModelTrainerConfig
+from src.DocumindAI.entity.config_entity import ModelTrainerConfig
 
 class ModelTrainer:
     def __init__(self, config:ModelTrainerConfig):

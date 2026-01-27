@@ -1,5 +1,6 @@
-projectenv/
+myprojectenv/
 artifacts/
 OCR_datset/
 claude/
 .env
+.github/main.yaml

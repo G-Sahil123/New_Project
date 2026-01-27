@@ -4,7 +4,7 @@ import zipfile
 from src.DocumindAI.logging import logger
 from src.DocumindAI.utils.common import get_size
 from pathlib import Path
-from src.DocumindAI.entity import DataIngestionConfig
+from src.DocumindAI.entity.config_entity import DataIngestionConfig
 
 class DataIngestion:
     def __init__(self, config: DataIngestionConfig):

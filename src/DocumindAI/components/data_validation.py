@@ -1,6 +1,6 @@
 import os 
 from src.DocumindAI.logging import logger
-from DocumindAI.entity import DataValidationConfig
+from DocumindAI.entity.config_entity import DataValidationConfig
 
 class DataValiadtion:
     def __init__(self, config: DataValidationConfig):

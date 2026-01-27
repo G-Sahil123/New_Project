@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.metrics import accuracy_score, f1_score
 import mlflow
 from mlflow.tracking import MlflowClient
-from src.DocumindAI.entity import EvaluationConfig
+from src.DocumindAI.entity.config_entity import EvaluationConfig
 from datasets import load_from_disk
 from pathlib import Path
 from src.DocumindAI.utils.common import save_json
@@ -69,7 +69,7 @@ class ModelEvaluation:
 
     def save_metrics(self,metrics):
         scores = {"f1_score": metrics["f1_score"], "accuracy": metrics["accuracy"],"mean_confidence": float(np.mean(metrics["confidence_scores_list"]))}
-        save_json(path=Path(self.config.root_dir)/"metrics.json", data=scores)
+        save_json(path=Path("metrics.json"), data=scores)
 
     
     def log_into_mlflow(self):
