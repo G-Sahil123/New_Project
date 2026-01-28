@@ -1,5 +1,5 @@
 import os
-from huggingface_hub import snapshot_download
+from huggingface_hub import snapshot_download  #type:ignore
 import zipfile
 from src.DocumindAI.logging import logger
 from src.DocumindAI.utils.common import get_size
@@ -21,7 +21,7 @@ class DataIngestion:
 
         if not os.path.exists(self.config.unzip_dir) or len(os.listdir(self.config.unzip_dir)) == 0:
             logger.info(f"Downloading dataset from Hugging Face: {self.config.source_URL}")
-            repo_id = self.config.source_URL.replace("https://huggingface.co/datasets/", "").strip("/")
+            repo_id = self.config.source_URL.replace("https://huggingface.co/datasets/OCR_datset", "").strip("/")
 
             local_path = snapshot_download(
                 repo_id=repo_id,

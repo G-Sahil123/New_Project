@@ -3,4 +3,4 @@ artifacts/
 OCR_datset/
 claude/
 .env
-.github/main.yaml
+.github/workflows/main.yaml

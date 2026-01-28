@@ -1,256 +1,174 @@
-from fastapi import FastAPI, UploadFile, File, Form, Request, Depends, HTTPException
+from fastapi import FastAPI, Request ,UploadFile, File, HTTPException, Form, Depends
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, RedirectResponse
-from typing import Optional
-import uuid
+from fastapi.security import OAuth2PasswordBearer
+from pydantic import BaseModel, Field, EmailStr ,field_validator
+import uvicorn
+import mysql.connector
 import os
+import re
+from dotenv import load_dotenv
 from datetime import datetime
+from src.DocumindAI.ml_pipeline.prediction import PredictionPipeline
+from pathlib import Path
+import shutil
+from uuid import uuid4
+from passlib.context import CryptContext
 
-# Import YOUR EXISTING MODULES
-from backend.models.users import User,MySQLDatabase
-from backend.models.document import  DocumentManager, DocumentCreate
-from backend.auth.auth_services import AuthService
-from backend.routes.auth_routes import get_db, get_session_token
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
-app = FastAPI(title="DocuMind AI")
+dotenv_path = os.path.join(os.path.dirname(__file__), "backend", ".env")
+load_dotenv(dotenv_path)
 
-# Mount static files and templates
-app.mount("/static", StaticFiles(directory="backend/static"), name="static")
+app = FastAPI(title ="DocumindAI",version="1.0")
+
+# Jinja2 template loader
 templates = Jinja2Templates(directory="frontend/templates")
 
-# Initialize your existing services
-db = MySQLDatabase()
-db.connect()
-document_manager = DocumentManager(db)
-auth_service = AuthService(db)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# Simple session storage for demo (use your proper session management)
-user_sessions = {}
+def get_db_connection():
+    return mysql.connector.connect(
+        host=os.getenv("DB_HOST"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME"),
+    )
 
+def get_current_user(request: Request)->int:
+    user_id = request.cookies.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return int(user_id)
+
+class RegisterUser(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+
+    @field_validator("password")
+    def strong_password(cls, v):
+        if not re.match(r"^(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*]).{8,}$", v):
+            raise ValueError("Weak password")
+        return v    
+
+# Serve UI at root "/"
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+    return templates.TemplateResponse("home.html", {"request": request})
 
-@app.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
+@app.get("/register", response_class=HTMLResponse)
+async def register_form(request: Request):
+    return templates.TemplateResponse("register.html", {"request": request})
 
-@app.post("/login")
-async def login_user(
-    request: Request,
+
+@app.post("/register")
+async def register(
+    full_name: str = Form(...),
     email: str = Form(...),
     password: str = Form(...)
 ):
-    try:
-        # Use YOUR existing authentication
-        result = auth_service.login_user({
-            "email": email,
-            "password": password
-        })
-        
-        # Create session (simplified - use your proper session management)
-        session_id = str(uuid.uuid4())
-        user_sessions[session_id] = {
-            "user_id": result["user"]["id"],
-            "email": result["user"]["email"],
-            "session_token": result["session_token"]
-        }
-        
-        response = RedirectResponse(url="/dashboard", status_code=303)
-        response.set_cookie(key="session_id", value=session_id)
-        return response
-        
-    except HTTPException as e:
-        return templates.TemplateResponse("login.html", {
-            "request": request,
-            "error": e.detail
-        })
+    user = RegisterUser(
+        full_name=full_name,
+        email=email,
+        password=password)
+    hashed_pw = pwd_context.hash(user.password)
+    
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT 1 FROM users WHERE email=%s", (email,))
+    if cur.fetchone():
+        conn.close()
+        raise HTTPException(400, "Email already exists")
 
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_page(request: Request):
-    # Check authentication
-    session_id = request.cookies.get("session_id")
-    if not session_id or session_id not in user_sessions:
-        return RedirectResponse(url="/login", status_code=303)
-    
-    user_data = user_sessions[session_id]
-    
-    # Get user's documents from YOUR MySQL database
-    documents = document_manager.get_user_documents(user_data["user_id"], limit=10)
-    
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "user": user_data,
-        "documents": documents
-    })
+    cur.execute("""
+        INSERT INTO users
+        (full_name,email,password)
+        VALUES (%s,%s,%s)
+    """, (user.full_name, user.email, hashed_pw))
+    conn.commit()
+    conn.close()
 
-@app.get("/upload", response_class=HTMLResponse)
-async def upload_page(request: Request):
-    # Check authentication
-    session_id = request.cookies.get("session_id")
-    if not session_id or session_id not in user_sessions:
-        return RedirectResponse(url="/login", status_code=303)
-    
-    return templates.TemplateResponse("upload.html", {
-        "request": request,
-        "user": user_sessions[session_id]
-    })
+    return RedirectResponse("/login", status_code=302)
 
-@app.post("/upload")
-async def upload_document(
-    request: Request,
-    file: UploadFile = File(...),
-    document_type: Optional[str] = Form("auto")
+@app.get("/login", response_class=HTMLResponse)
+async def login_form(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
+@app.post("/login")
+async def login(
+    email: str = Form(...),
+    password: str = Form(...)
 ):
-    try:
-        # Check authentication
-        session_id = request.cookies.get("session_id")
-        if not session_id or session_id not in user_sessions:
-            return RedirectResponse(url="/login", status_code=303)
-        
-        user_data = user_sessions[session_id]
-        user_id = user_data["user_id"]
-        
-        # Save uploaded file
-        file_id = str(uuid.uuid4())
-        file_extension = os.path.splitext(file.filename)[1]
-        saved_filename = f"{file_id}{file_extension}"
-        
-        upload_dir = "uploads"
-        os.makedirs(upload_dir, exist_ok=True)
-        file_path = os.path.join(upload_dir, saved_filename)
-        
-        with open(file_path, "wb") as buffer:
-            content = await file.read()
-            buffer.write(content)
-        
-        # Process with YOUR existing AI engine
-        processing_result = await process_with_your_ai(file_path, file.filename, document_type)
-        
-        # Save to YOUR MySQL database using existing DocumentManager
-        document_data = DocumentCreate(
-            original_filename=file.filename,
-            file_path=file_path,
-            file_size=len(content),
-            mime_type=file.content_type,
-            document_type=processing_result["document_type"],
-            extracted_data=processing_result["extracted_data"],
-            summary=processing_result["summary"]
-        )
-        
-        # Use YOUR existing document manager
-        stored_document = document_manager.create_document(
-            user_id, document_data
-        )
-        
-        return RedirectResponse(url="/documents", status_code=303)
-        
-    except Exception as e:
-        return templates.TemplateResponse("upload.html", {
-            "request": request,
-            "error": f"Upload failed: {str(e)}"
-        })
+    conn = get_db_connection()
+    cur = conn.cursor(dictionary=True)
+    cur.execute(
+        "SELECT user_id,password FROM users WHERE email=%s",
+        (email,)
+    )
+    user = cur.fetchone()
+    conn.close()
 
-@app.get("/documents", response_class=HTMLResponse)
-async def documents_page(request: Request):
-    # Check authentication
-    session_id = request.cookies.get("session_id")
-    if not session_id or session_id not in user_sessions:
-        return RedirectResponse(url="/login", status_code=303)
-    
-    user_data = user_sessions[session_id]
-    
-    # Get documents from YOUR MySQL database
-    documents = document_manager.get_user_documents(user_data["user_id"])
-    
-    return templates.TemplateResponse("documents.html", {
-        "request": request,
-        "user": user_data,
-        "documents": documents
-    })
+    if not user or not pwd_context.verify(password,user["password"]):
+        raise HTTPException(401, "Invalid credentials")
 
-@app.get("/document/{document_id}", response_class=HTMLResponse)
-async def view_document(request: Request, document_id: str):
-    # Check authentication
-    session_id = request.cookies.get("session_id")
-    if not session_id or session_id not in user_sessions:
-        return RedirectResponse(url="/login", status_code=303)
-    
-    user_data = user_sessions[session_id]
-    
-    # Get document from YOUR MySQL database
-    document = document_manager.get_document(document_id, user_data["user_id"])
-    
-    if not document:
-        return templates.TemplateResponse("error.html", {
-            "request": request,
-            "error": "Document not found"
-        })
-    
-    return templates.TemplateResponse("document_detail.html", {
-        "request": request,
-        "user": user_data,
-        "document": document
-    })
-
-@app.post("/delete/{document_id}")
-async def delete_document(document_id: str, request: Request):
-    # Check authentication
-    session_id = request.cookies.get("session_id")
-    if not session_id or session_id not in user_sessions:
-        return RedirectResponse(url="/login", status_code=303)
-    
-    user_data = user_sessions[session_id]
-    
-    # Delete using YOUR existing document manager
-    success = document_manager.delete_document(document_id, user_data["user_id"])
-    
-    return RedirectResponse(url="/documents", status_code=303)
-
-async def process_with_your_ai(file_path: str, filename: str, document_type: str):
-    """
-    INTEGRATION POINT: Replace this with YOUR actual AI processing
-    from Phase 1
-    """
-    # YOUR existing AI code goes here
-    # This should call your document classification, extraction, and summarization
-    
-    if document_type == "auto":
-        # Call your classification model
-        doc_type = "invoice"  # Replace with actual classification
-    else:
-        doc_type = document_type
-    
-    # Call your extraction models based on document type
-    extracted_data = {
-        "vendor": "Extracted Vendor Name",
-        "amount": 1500.00,
-        "due_date": "2024-01-20",
-        "invoice_number": "INV-2024-001"
-    }
-    
-    # Call your summarization model
-    summary = "AI-generated summary based on extracted information"
-    
-    return {
-        "document_type": doc_type,
-        "extracted_data": extracted_data,
-        "summary": summary,
-        "confidence_score": 0.89,
-        "processing_status": "completed"
-    }
-
-@app.post("/logout")
-async def logout_user(request: Request):
-    session_id = request.cookies.get("session_id")
-    if session_id and session_id in user_sessions:
-        del user_sessions[session_id]
-    
-    response = RedirectResponse(url="/login", status_code=303)
-    response.delete_cookie(key="session_id")
+    response = RedirectResponse("/predict", status_code=302)
+    response.set_cookie("user_id", str(user["user_id"]), httponly=True)
     return response
 
+# Training route
+@app.get("/train-ui", response_class=HTMLResponse)
+async def train(request: Request,user_id: int = Depends(get_current_user)):
+    return templates.TemplateResponse("train.html", {"request": request})
+
+@app.post("/train")
+async def training(user_id: int = Depends(get_current_user)):
+    try:
+        os.system("python main.py")
+        # os.system("dvc repro")
+        return {"message": "Training successful !!"}
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+# Prediction route
+@app.get("/predict", response_class=HTMLResponse)
+async def predict_form(request: Request,user_id: int = Depends(get_current_user)):
+    return templates.TemplateResponse("predict.html", {"request": request})
+
+@app.post("/predict")
+async def predict(file:UploadFile=File(...),user_id: int=Depends(get_current_user)):
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename missing")
+          
+    if file.content_type not in {"image/tiff", "image/jpeg", "image/png","image/tif","image/jpg"}:
+        raise HTTPException(status_code=400, detail="Unsupported file type")
+        
+    suffix = Path(file.filename).suffix
+    safe_name = f"{uuid4().hex}{suffix}"  
+    file_path = UPLOAD_DIR/safe_name
+
+    with open(file_path,"wb") as f:
+        shutil.copyfileobj(file.file,f)
+
+    try:
+        pipeline = PredictionPipeline(file_path)
+        prediction, metadata = pipeline.predict()
+        return {"document_type": prediction}
+    except Exception:
+            raise HTTPException(500, "Prediction failed")
+    finally:
+        if file_path.exists():
+            file_path.unlink()
+    
+@app.get("/logout")
+async def logout():
+    response = RedirectResponse("/", status_code=302)
+    response.delete_cookie("user_id")
+    return response    
+
+
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
